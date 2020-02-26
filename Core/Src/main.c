@@ -61,10 +61,11 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+/* Initialize global variables */
 GPIO_PinState button_state, button_state_last;  // Actual and previous status of user button
-int edge_detection;   // edge detection of the user button
-float sensor_max; // Sensor maximal value
-arm_pid_instance_f32 PID;  // PID instance
+int edge_detection;   							// edge detection of the user button
+float sensor_max; 								// Sensor maximum value
+arm_pid_instance_f32 PID;  						// PID instance
 
 /* USER CODE END PV */
 
@@ -73,7 +74,7 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 
 /**
-  * @brief  Displays data on LCD.
+  * @brief  Send_Output displays data on LCD.
   * @param  sensor_value is current value read by the sensor.
   * @param  requested_value is reference value set by the user.
   * @retval None
@@ -83,18 +84,18 @@ void Send_Output(float sensor_value, float requested_value)
 	char sensor_value_local[16];
 	char requested_value_local[16];
 
-	sprintf(sensor_value_local, "%g", sensor_value);
-	sprintf(requested_value_local, "%g", requested_value);
+	sprintf(sensor_value_local, "%g", sensor_value);		// write values into arrays in a format
+	sprintf(requested_value_local, "%g", requested_value);	// which gives the best precision in minimum place
 
 	lcd_clear ();
 	lcd_send_cmd(0x80);
-	lcd_send_string("VAL:");
+	lcd_send_string("VAL:");								// write current value of sensor to LCD
 	lcd_send_string((uint8_t*)sensor_value_local);
 	lcd_send_string(" lux");
 
 	lcd_put_cur(1, 0);
 	lcd_send_string("REQ:");
-	lcd_send_string((uint8_t*)requested_value_local);
+	lcd_send_string((uint8_t*)requested_value_local);		// wirte requested value of sensor to LCD
 	lcd_send_string(" lux");
 	HAL_Delay(200);
 }
@@ -106,10 +107,10 @@ void Send_Output(float sensor_value, float requested_value)
 float Sensor_Range()
 {
 	float max_value=0;
-	TIM3->CCR1=100000;
+	TIM3->CCR1=100000;				// Activate the diode with the max value
 	HAL_Delay(500);
-	BH1750_ReadLight(&max_value);
-	TIM3->CCR1=0;
+	BH1750_ReadLight(&max_value);	// Read the converted value from the sensor and calculate the result
+	TIM3->CCR1=0;					// Turn off the diode
 	HAL_Delay(300);
 	return max_value;
 }
@@ -119,7 +120,6 @@ float Sensor_Range()
   */
 void Button_Pressed()
 {
-	 // set edge detection value
 		  	  if((button_state == GPIO_PIN_SET)&&(button_state_last == GPIO_PIN_RESET))
 		  	  {
 		  		  edge_detection = 1;
@@ -130,8 +130,7 @@ void Button_Pressed()
 		  	  }
 		  	  button_state_last = button_state;
 
-
-		  	  // set new maximal value of the sensor
+		  	  /* set new maximal value of the sensor */
 		  	  if(edge_detection)
 		  	  {
 		  		sensor_max=Sensor_Range();
@@ -146,20 +145,21 @@ void Button_Pressed()
   */
 void Calculate_PWM(float sensor_value, float requested_value)
 {
-	float light_delta;    	 // Difference between requested value and actual value of the sensor
-	int PWM_duty = 10;       // PWM duty value
-	float32_t PID_duty = 0;  // PID duty value
-	light_delta = requested_value - sensor_value;
-	PID_duty = arm_pid_f32(&PID, light_delta);
-	PWM_duty += (int)(PID_duty*sensor_max / 100000.0);// calculate PWM value
-	// check if PWM duty is in range
+	float light_delta = 0;    								// Difference between requested value and actual value of the sensor
+	int PWM_duty = 10;      							// PWM duty initial value
+	float32_t PID_duty = 0; 	 						// PID duty initial value
+	light_delta = requested_value - sensor_value;		// Difference between actual and requested value (lux)
+	PID_duty = arm_pid_f32(&PID, light_delta);			// calculate PID duty
+	PWM_duty += (int)(PID_duty*sensor_max / 100000.0);	// calculate PWM value
+
+	/* check if PWM duty is in range */
 	if(PWM_duty > 100000){
 		PWM_duty = 100000;
 	}
 	else if(PWM_duty < 0){
 		PWM_duty = 0;
 	}
-	// set calculated PWM value
+	/* set calculated PWM value */
 	TIM3->CCR1 = PWM_duty;
 }
 
@@ -179,11 +179,11 @@ void Calculate_PWM(float sensor_value, float requested_value)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	char terminal_setpoint[40];  	// UART receiving buffer
-	uint8_t terminal_setpoint_size; // size of the UART message
-	char buffer[40]; 				// UART sending buffer
-	float sensor_value; 			// sensor actual value
-	float requested_value=0; 		// Sensor requested value
+	char terminal_setpoint[40];  		// UART receiving buffer
+	uint8_t terminal_setpoint_size; 	// size of the UART message
+	char buffer[40]; 					// UART sending buffer
+	float sensor_value; 				// sensor actual value
+	float requested_value=0; 			// Sensor requested value
 	/* Rewrite defined PID parameters to PID instance */
 	PID.Kp = PID_PARAM_KP;
 	PID.Ki = PID_PARAM_KI;
@@ -228,7 +228,7 @@ int main(void)
   /* Initialize PID */
   	  arm_pid_init_f32(&PID, 1);
   /* Adjusts maximum range of sensor based on current light level in the room*/
-  	  sensor_max=Sensor_Range();
+  	  sensor_max = Sensor_Range();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -240,17 +240,17 @@ int main(void)
 	  	  button_state = HAL_GPIO_ReadPin(USER_Btn_GPIO_Port, USER_Btn_Pin);// read button state
 	  	  Button_Pressed();
 
-	  	  // calculate PWM duty value
+	  	  /* calculate PWM duty value */
 	  	  Calculate_PWM(sensor_value, requested_value);
 
-	  	  // send current and requested values to LCD
+	  	  /* send current and requested values to LCD */
 	  	  Send_Output(sensor_value, requested_value);
 
-	  	  // transmit actual sensor value over UART
+	  	  /* transmit actual sensor value over UART */
 	  	  terminal_setpoint_size=sprintf (buffer, "%3.2f\n\r", sensor_value);
 	  	  HAL_UART_Transmit_IT(&huart3,(uint8_t*) buffer, terminal_setpoint_size);
 
-	  	  // receive wanted sensor value from UART
+	  	  /* receive wanted sensor value from UART */
 	  	  HAL_UART_Receive_IT( &huart3, (uint8_t*)&terminal_setpoint, terminal_setpoint_size);
 	  	  requested_value= atof(terminal_setpoint);
 
