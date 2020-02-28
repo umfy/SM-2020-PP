@@ -47,9 +47,15 @@
 /* USER CODE BEGIN PD */
 /* define PID parameters */
 // Ku = 30 +  ; 7 15 0.1 ; 24 0.1 0 ; 32 6 0.2-2 ; 32 2 0.1
-#define PID_PARAM_KP        24
-#define PID_PARAM_KI        2
-#define PID_PARAM_KD        0.1
+// 80 lux -> Ku = 35: 21
+// best pi 18 16 lo light
+//int Ku = 28; kp 12.6 ki 16.8
+// pid ku 28 -> 16.8 37.3 1.89
+// 2.5 1.125 1.5 0
+// 2.5
+#define PID_PARAM_KP        0
+#define PID_PARAM_KI		0.8
+#define PID_PARAM_KD        0
 
 /* USER CODE END PD */
 
@@ -62,9 +68,6 @@
 
 /* USER CODE BEGIN PV */
 /* Initialize global variables */
-GPIO_PinState button_state, button_state_last;  // Actual and previous status of user button
-int edge_detection;   							// edge detection of the user button
-float sensor_max; 								// Sensor maximum value
 arm_pid_instance_f32 PID;  						// PID instance
 
 /* USER CODE END PV */
@@ -115,35 +118,13 @@ float Sensor_Range()
 	return max_value;
 }
 /**
-  * @brief  Button_Pressed activates when button is pressed in order to set the sensor_max value.
-  * @retval None
-  */
-void Button_Pressed()
-{
-		  	  if((button_state == GPIO_PIN_SET)&&(button_state_last == GPIO_PIN_RESET))
-		  	  {
-		  		  edge_detection = 1;
-		  	  }
-		  	  else
-		  	  {
-		  		  edge_detection = 0;
-		  	  }
-		  	  button_state_last = button_state;
-
-		  	  /* set new maximal value of the sensor */
-		  	  if(edge_detection)
-		  	  {
-		  		sensor_max=Sensor_Range();
-		  	  }
-}
-/**
   * @brief  Calculate_PWM calculates PWM Duty. Based on difference between
   * actual and requested value and PID controller.
   * @param  sensor_value is current value read by the sensor.
   * @param  requested_value is reference value set by the user.
   * @retval None
   */
-void Calculate_PWM(float sensor_value, float requested_value)
+void Calculate_PWM(float sensor_value, float requested_value, float sensor_max)
 {
 	float light_delta = 0;    								// Difference between requested value and actual value of the sensor
 	int PWM_duty = 10;      							// PWM duty initial value
@@ -184,6 +165,7 @@ int main(void)
 	char buffer[40]; 					// UART sending buffer
 	float sensor_value; 				// sensor actual value
 	float requested_value=0; 			// Sensor requested value
+	float sensor_max; 					// Sensor maximum value
 	/* Rewrite defined PID parameters to PID instance */
 	PID.Kp = PID_PARAM_KP;
 	PID.Ki = PID_PARAM_KI;
@@ -237,11 +219,8 @@ int main(void)
   {
 	  	  BH1750_ReadLight(&sensor_value); // Reads the converted value and calculates the result.
 
-	  	  button_state = HAL_GPIO_ReadPin(USER_Btn_GPIO_Port, USER_Btn_Pin);// read button state
-	  	  Button_Pressed();
-
 	  	  /* calculate PWM duty value */
-	  	  Calculate_PWM(sensor_value, requested_value);
+	  	  Calculate_PWM(sensor_value, requested_value, sensor_max);
 
 	  	  /* send current and requested values to LCD */
 	  	  Send_Output(sensor_value, requested_value);
@@ -250,7 +229,7 @@ int main(void)
 	  	  terminal_setpoint_size=sprintf (buffer, "%3.2f\n\r", sensor_value);
 	  	  HAL_UART_Transmit_IT(&huart3,(uint8_t*) buffer, terminal_setpoint_size);
 
-	  	  /* receive wanted sensor value from UART */
+	  	  /* receive requested sensor value from UART */
 	  	  HAL_UART_Receive_IT( &huart3, (uint8_t*)&terminal_setpoint, terminal_setpoint_size);
 	  	  requested_value= atof(terminal_setpoint);
 
